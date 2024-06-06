@@ -1,5 +1,5 @@
 import React, { ReactElement } from 'react';
-import { type Location } from '../modules/location/locationManager';
+import { ILocationManager, type Location } from '../modules/location/locationManager';
 export declare enum UserLocationRenderMode {
     Native = "native",
     Normal = "normal"
@@ -54,6 +54,7 @@ type Props = {
      * Whether location icon is visible
      */
     visible?: boolean;
+    customLocationManager?: ILocationManager;
 };
 type UserLocationState = {
     shouldShowUserLocation: false;
@@ -69,6 +70,7 @@ declare class UserLocation extends React.Component<Props, UserLocationState> {
         minDisplacement: number;
         renderMode: UserLocationRenderMode;
     };
+    locationManager: ILocationManager;
     constructor(props: Props);
     _isMounted?: boolean;
     locationManagerRunning?: boolean;
