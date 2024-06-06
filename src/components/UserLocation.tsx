@@ -210,6 +210,12 @@ class UserLocation extends React.Component<Props, UserLocationState> {
    * @return {Promise<void>}
    */
   async setLocationManager({ running }: { running?: boolean }) {
+    if (this.props.mockLocation) {
+      this.locationManager.setCustomLocationUpdater(this.props.mockLocation);
+      this._onLocationUpdate(this.props.mockLocation.getLocation());
+    } else {
+      this.locationManager.setCustomLocationUpdater(null);
+    }
     if (this.locationManagerRunning !== running) {
       this.locationManagerRunning = running;
       if (running) {
