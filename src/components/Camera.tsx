@@ -593,7 +593,7 @@ export const Camera = memo(
           animationMode={animationMode}
           defaultStop={nativeDefaultStop}
           followUserLocation={
-            followUserLocation && !locationManager.hasCustomLocationUpdater()
+            followUserLocation && !locationManager.hasMockLocation()
           }
           followUserMode={followUserMode}
           followZoomLevel={followZoomLevel}

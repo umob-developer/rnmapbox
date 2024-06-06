@@ -1,7 +1,6 @@
 import React, { ReactElement } from 'react';
 
 import locationManager, {
-  CustomLocationUpdater,
   type Location,
 } from '../modules/location/locationManager';
 import { CircleLayerStyle } from '../Mapbox';
@@ -124,7 +123,7 @@ type Props = {
    */
   visible?: boolean;
 
-  mockLocation?: CustomLocationUpdater;
+  mockLocation?: Location;
 };
 
 type UserLocationState = {
@@ -152,7 +151,7 @@ class UserLocation extends React.Component<Props, UserLocationState> {
       heading: null,
     };
 
-    locationManager.setCustomLocationUpdater(props.mockLocation ?? null);
+    locationManager.setMockLocation(props.mockLocation ?? null);
 
     this._onLocationUpdate = this._onLocationUpdate.bind(this);
   }
@@ -183,8 +182,12 @@ class UserLocation extends React.Component<Props, UserLocationState> {
     });
 
     if (this.props.mockLocation !== prevProps.mockLocation) {
-      locationManager.setCustomLocationUpdater(this.props.mockLocation ?? null);
-      this._onLocationUpdate(this.props.mockLocation?.getLocation() ?? null);
+      locationManager.setMockLocation(this.props.mockLocation ?? null);
+      if(this.props.mockLocation) {
+        this._onLocationUpdate(this.props.mockLocation ?? null);
+      } else {
+        this._onLocationUpdate(await locationManager.getLastKnownLocation());
+      }
     }
     if (this.props.minDisplacement !== prevProps.minDisplacement) {
       locationManager.setMinDisplacement(this.props.minDisplacement || 0);
@@ -241,7 +244,7 @@ class UserLocation extends React.Component<Props, UserLocationState> {
   _onLocationUpdate(newLocation: Location | null) {
     let location = newLocation;
     if (this.props.mockLocation) {
-      location = this.props.mockLocation.getLocation();
+      location = this.props.mockLocation;
     }
     if (!this._isMounted || !location) {
       return;

@@ -1,5 +1,5 @@
 import React, { ReactElement } from 'react';
-import { CustomLocationUpdater, type Location } from '../modules/location/locationManager';
+import { type Location } from '../modules/location/locationManager';
 export declare enum UserLocationRenderMode {
     Native = "native",
     Normal = "normal"
@@ -54,7 +54,7 @@ type Props = {
      * Whether location icon is visible
      */
     visible?: boolean;
-    mockLocation?: CustomLocationUpdater;
+    mockLocation?: Location;
 };
 type UserLocationState = {
     shouldShowUserLocation: false;

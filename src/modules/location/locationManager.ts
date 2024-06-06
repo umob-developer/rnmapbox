@@ -77,7 +77,7 @@ export class LocationManager {
   subscription: EmitterSubscription | null;
   _appStateListener: NativeEventSubscription;
   _minDisplacement?: number;
-  _customLocationUpdater: CustomLocationUpdater | null;
+  _mockLocation: Location | null;
 
   constructor() {
     this._listeners = [];
@@ -92,20 +92,20 @@ export class LocationManager {
       this._handleAppStateChange.bind(this),
     );
 
-    this._customLocationUpdater = null;
+    this._mockLocation = null;
   }
 
-  setCustomLocationUpdater(updater: CustomLocationUpdater | null) {
-    this._customLocationUpdater = updater;
+  setMockLocation(updater: Location | null) {
+    this._mockLocation = updater;
   }
 
-  hasCustomLocationUpdater(): boolean {
-    return this._customLocationUpdater !== null;
+  hasMockLocation(): boolean {
+    return this._mockLocation !== null;
   }
 
   async getLastKnownLocation() {
-    if (this._customLocationUpdater) {
-      this._lastKnownLocation = this._customLocationUpdater.getLocation();
+    if (this._mockLocation) {
+      this._lastKnownLocation = this._mockLocation;
       return this._lastKnownLocation;
     }
     if (!this._lastKnownLocation) {
@@ -213,8 +213,8 @@ export class LocationManager {
 
   _onUpdate(newLocation: Location) {
     let location = newLocation;
-    if (this._customLocationUpdater) {
-      location = this._customLocationUpdater.getLocation();
+    if (this._mockLocation) {
+      location = this._mockLocation;
     }
     this._lastKnownLocation = location;
 
@@ -241,10 +241,6 @@ export class LocationManager {
   setLocationEventThrottle(throttleValue: number) {
     MapboxGLLocationManager.setLocationEventThrottle(throttleValue);
   }
-}
-
-export interface CustomLocationUpdater {
-  getLocation(): Location;
 }
 
 export default new LocationManager();

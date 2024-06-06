@@ -55,10 +55,10 @@ export declare class LocationManager {
     subscription: EmitterSubscription | null;
     _appStateListener: NativeEventSubscription;
     _minDisplacement?: number;
-    _customLocationUpdater: CustomLocationUpdater | null;
+    _mockLocation: Location | null;
     constructor();
-    setCustomLocationUpdater(updater: CustomLocationUpdater | null): void;
-    hasCustomLocationUpdater(): boolean;
+    setMockLocation(updater: Location | null): void;
+    hasMockLocation(): boolean;
     getLastKnownLocation(): Promise<Location | null>;
     addListener(listener: (location: Location) => void): void;
     removeListener(listener: (location: Location) => void): void;
@@ -84,9 +84,6 @@ export declare class LocationManager {
      * @return {void}
      */
     setLocationEventThrottle(throttleValue: number): void;
-}
-export interface CustomLocationUpdater {
-    getLocation(): Location;
 }
 declare const _default: LocationManager;
 export default _default;
