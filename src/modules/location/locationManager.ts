@@ -69,7 +69,7 @@ interface Coordinates {
 /**
  * LocationManager is a singleton, see `locationManager`
  */
-export class LocationManager {
+export class LocationManager implements ILocationManager{
   _listeners: ((location: Location) => void)[];
   _lastKnownLocation: Location | null;
   _isListening: boolean;
@@ -222,6 +222,36 @@ export class LocationManager {
   setLocationEventThrottle(throttleValue: number) {
     MapboxGLLocationManager.setLocationEventThrottle(throttleValue);
   }
+}
+
+export interface ILocationManager {
+  getLastKnownLocation(): Promise<any>;
+
+  addListener(listener: (location: Location) => void): void;
+
+  removeListener(listener: (location: Location) => void): void;
+
+  removeAllListeners(): void;
+
+  start(displacement: number): void;
+
+  stop(): void;
+
+  setMinDisplacement(minDisplacement: number): void;
+
+  setRequestsAlwaysUse(requestsAlwaysUse: boolean): void;
+
+  /**
+   * Sets the period at which location events will be sent over the React Native bridge.
+   * The default is 0, aka no limit. [V10, iOS only]
+   *
+   * @example
+   * locationManager.setLocationEventThrottle(500);
+   *
+   * @param {Number} throttleValue event throttle value in ms.
+   * @return {void}
+   */
+  setLocationEventThrottle(throttleValue: number): void;
 }
 
 export default new LocationManager();

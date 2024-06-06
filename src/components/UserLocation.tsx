@@ -1,7 +1,9 @@
 import React, { ReactElement } from 'react';
 
-import locationManager from '../modules/location/locationManager';
-import { type Location } from '../modules/location/locationManager';
+import realLocationManager, {
+  ILocationManager,
+  type Location,
+} from '../modules/location/locationManager';
 import { CircleLayerStyle } from '../Mapbox';
 
 import Annotation from './Annotation';
@@ -121,6 +123,8 @@ type Props = {
    * Whether location icon is visible
    */
   visible?: boolean;
+
+  customLocationManager?: ILocationManager;
 };
 
 type UserLocationState = {
@@ -139,6 +143,8 @@ class UserLocation extends React.Component<Props, UserLocationState> {
     renderMode: UserLocationRenderMode.Normal,
   };
 
+  locationManager: ILocationManager = realLocationManager;
+
   constructor(props: Props) {
     super(props);
 
@@ -147,6 +153,10 @@ class UserLocation extends React.Component<Props, UserLocationState> {
       coordinates: null,
       heading: null,
     };
+
+    if (props.customLocationManager !== undefined) {
+      this.locationManager = props.customLocationManager;
+    }
 
     this._onLocationUpdate = this._onLocationUpdate.bind(this);
   }
@@ -160,7 +170,7 @@ class UserLocation extends React.Component<Props, UserLocationState> {
   async componentDidMount() {
     this._isMounted = true;
 
-    locationManager.setMinDisplacement(this.props.minDisplacement || 0);
+    this.locationManager.setMinDisplacement(this.props.minDisplacement || 0);
 
     await this.setLocationManager({
       running: this.needsLocationManagerRunning(),
@@ -177,10 +187,10 @@ class UserLocation extends React.Component<Props, UserLocationState> {
     });
 
     if (this.props.minDisplacement !== prevProps.minDisplacement) {
-      locationManager.setMinDisplacement(this.props.minDisplacement || 0);
+      this.locationManager.setMinDisplacement(this.props.minDisplacement || 0);
     }
     if (this.props.requestsAlwaysUse !== prevProps.requestsAlwaysUse) {
-      locationManager.setRequestsAlwaysUse(
+      this.locationManager.setRequestsAlwaysUse(
         this.props.requestsAlwaysUse || false,
       );
     }
@@ -205,11 +215,11 @@ class UserLocation extends React.Component<Props, UserLocationState> {
     if (this.locationManagerRunning !== running) {
       this.locationManagerRunning = running;
       if (running) {
-        locationManager.addListener(this._onLocationUpdate);
-        const location = await locationManager.getLastKnownLocation();
+        this.locationManager.addListener(this._onLocationUpdate);
+        const location = await this.locationManager.getLastKnownLocation();
         this._onLocationUpdate(location);
       } else {
-        locationManager.removeListener(this._onLocationUpdate);
+        this.locationManager.removeListener(this._onLocationUpdate);
       }
     }
   }
