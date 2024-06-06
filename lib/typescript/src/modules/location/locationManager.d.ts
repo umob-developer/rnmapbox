@@ -58,6 +58,7 @@ export declare class LocationManager {
     _customLocationUpdater: CustomLocationUpdater | null;
     constructor();
     setCustomLocationUpdater(updater: CustomLocationUpdater | null): void;
+    hasCustomLocationUpdater(): boolean;
     getLastKnownLocation(): Promise<Location | null>;
     addListener(listener: (location: Location) => void): void;
     removeListener(listener: (location: Location) => void): void;

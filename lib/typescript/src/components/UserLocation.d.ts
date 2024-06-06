@@ -70,7 +70,6 @@ declare class UserLocation extends React.Component<Props, UserLocationState> {
         minDisplacement: number;
         renderMode: UserLocationRenderMode;
     };
-    locationManager: import("../modules/location/locationManager").LocationManager;
     constructor(props: Props);
     _isMounted?: boolean;
     locationManagerRunning?: boolean;
@@ -97,7 +96,7 @@ declare class UserLocation extends React.Component<Props, UserLocationState> {
      * @return {boolean}
      */
     needsLocationManagerRunning(): boolean | undefined;
-    _onLocationUpdate(location: Location | null): void;
+    _onLocationUpdate(newLocation: Location | null): void;
     _renderNative(): React.JSX.Element;
     render(): React.JSX.Element | null;
 }

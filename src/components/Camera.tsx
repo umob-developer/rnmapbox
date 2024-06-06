@@ -16,6 +16,7 @@ import { type NativeRefType } from '../utils/nativeRef';
 import NativeCameraView from '../specs/RNMBXCameraNativeComponent';
 import RNMBXCameraModule from '../specs/NativeRNMBXCameraModule';
 import { NativeCommands, type NativeArg } from '../utils/NativeCommands';
+import locationManager from "../modules/location/locationManager";
 
 const NativeModule = NativeModules.RNMBXModule;
 
@@ -591,7 +592,9 @@ export const Camera = memo(
           animationDuration={animationDuration}
           animationMode={animationMode}
           defaultStop={nativeDefaultStop}
-          followUserLocation={followUserLocation}
+          followUserLocation={
+            followUserLocation && !locationManager.hasCustomLocationUpdater()
+          }
           followUserMode={followUserMode}
           followZoomLevel={followZoomLevel}
           followPitch={followPitch}

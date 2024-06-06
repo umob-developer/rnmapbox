@@ -1,6 +1,6 @@
 import React, { ReactElement } from 'react';
 
-import realLocationManager, {
+import locationManager, {
   CustomLocationUpdater,
   type Location,
 } from '../modules/location/locationManager';
@@ -143,8 +143,6 @@ class UserLocation extends React.Component<Props, UserLocationState> {
     renderMode: UserLocationRenderMode.Normal,
   };
 
-  locationManager = realLocationManager;
-
   constructor(props: Props) {
     super(props);
 
@@ -154,7 +152,7 @@ class UserLocation extends React.Component<Props, UserLocationState> {
       heading: null,
     };
 
-    this.locationManager.setCustomLocationUpdater(props.mockLocation ?? null);
+    locationManager.setCustomLocationUpdater(props.mockLocation ?? null);
 
     this._onLocationUpdate = this._onLocationUpdate.bind(this);
   }
@@ -168,7 +166,7 @@ class UserLocation extends React.Component<Props, UserLocationState> {
   async componentDidMount() {
     this._isMounted = true;
 
-    this.locationManager.setMinDisplacement(this.props.minDisplacement || 0);
+    locationManager.setMinDisplacement(this.props.minDisplacement || 0);
 
     await this.setLocationManager({
       running: this.needsLocationManagerRunning(),
@@ -184,11 +182,15 @@ class UserLocation extends React.Component<Props, UserLocationState> {
       running: this.needsLocationManagerRunning(),
     });
 
+    if (this.props.mockLocation !== prevProps.mockLocation) {
+      locationManager.setCustomLocationUpdater(this.props.mockLocation ?? null);
+      this._onLocationUpdate(this.props.mockLocation?.getLocation() ?? null);
+    }
     if (this.props.minDisplacement !== prevProps.minDisplacement) {
-      this.locationManager.setMinDisplacement(this.props.minDisplacement || 0);
+      locationManager.setMinDisplacement(this.props.minDisplacement || 0);
     }
     if (this.props.requestsAlwaysUse !== prevProps.requestsAlwaysUse) {
-      this.locationManager.setRequestsAlwaysUse(
+      locationManager.setRequestsAlwaysUse(
         this.props.requestsAlwaysUse || false,
       );
     }
@@ -210,20 +212,14 @@ class UserLocation extends React.Component<Props, UserLocationState> {
    * @return {Promise<void>}
    */
   async setLocationManager({ running }: { running?: boolean }) {
-    if (this.props.mockLocation) {
-      this.locationManager.setCustomLocationUpdater(this.props.mockLocation);
-      this._onLocationUpdate(this.props.mockLocation.getLocation());
-    } else {
-      this.locationManager.setCustomLocationUpdater(null);
-    }
     if (this.locationManagerRunning !== running) {
       this.locationManagerRunning = running;
       if (running) {
-        this.locationManager.addListener(this._onLocationUpdate);
-        const location = await this.locationManager.getLastKnownLocation();
+        locationManager.addListener(this._onLocationUpdate);
+        const location = await locationManager.getLastKnownLocation();
         this._onLocationUpdate(location);
       } else {
-        this.locationManager.removeListener(this._onLocationUpdate);
+        locationManager.removeListener(this._onLocationUpdate);
       }
     }
   }
@@ -242,7 +238,11 @@ class UserLocation extends React.Component<Props, UserLocationState> {
     );
   }
 
-  _onLocationUpdate(location: Location | null) {
+  _onLocationUpdate(newLocation: Location | null) {
+    let location = newLocation;
+    if (this.props.mockLocation) {
+      location = this.props.mockLocation.getLocation();
+    }
     if (!this._isMounted || !location) {
       return;
     }

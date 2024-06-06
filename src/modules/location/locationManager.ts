@@ -99,6 +99,10 @@ export class LocationManager {
     this._customLocationUpdater = updater;
   }
 
+  hasCustomLocationUpdater(): boolean {
+    return this._customLocationUpdater !== null;
+  }
+
   async getLastKnownLocation() {
     if (this._customLocationUpdater) {
       this._lastKnownLocation = this._customLocationUpdater.getLocation();
