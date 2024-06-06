@@ -1,7 +1,7 @@
 import React, { ReactElement } from 'react';
 
 import realLocationManager, {
-  ILocationManager,
+  CustomLocationUpdater,
   type Location,
 } from '../modules/location/locationManager';
 import { CircleLayerStyle } from '../Mapbox';
@@ -124,7 +124,7 @@ type Props = {
    */
   visible?: boolean;
 
-  customLocationManager?: ILocationManager;
+  mockLocation?: CustomLocationUpdater;
 };
 
 type UserLocationState = {
@@ -143,7 +143,7 @@ class UserLocation extends React.Component<Props, UserLocationState> {
     renderMode: UserLocationRenderMode.Normal,
   };
 
-  locationManager: ILocationManager = realLocationManager;
+  locationManager = realLocationManager;
 
   constructor(props: Props) {
     super(props);
@@ -154,9 +154,7 @@ class UserLocation extends React.Component<Props, UserLocationState> {
       heading: null,
     };
 
-    if (props.customLocationManager !== undefined) {
-      this.locationManager = props.customLocationManager;
-    }
+    this.locationManager.setCustomLocationUpdater(props.mockLocation ?? null);
 
     this._onLocationUpdate = this._onLocationUpdate.bind(this);
   }

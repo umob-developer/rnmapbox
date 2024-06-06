@@ -69,7 +69,7 @@ interface Coordinates {
 /**
  * LocationManager is a singleton, see `locationManager`
  */
-export class LocationManager implements ILocationManager{
+export class LocationManager {
   _listeners: ((location: Location) => void)[];
   _lastKnownLocation: Location | null;
   _isListening: boolean;
@@ -77,6 +77,7 @@ export class LocationManager implements ILocationManager{
   subscription: EmitterSubscription | null;
   _appStateListener: NativeEventSubscription;
   _minDisplacement?: number;
+  _customLocationUpdater: CustomLocationUpdater | null;
 
   constructor() {
     this._listeners = [];
@@ -90,9 +91,19 @@ export class LocationManager implements ILocationManager{
       'change',
       this._handleAppStateChange.bind(this),
     );
+
+    this._customLocationUpdater = null;
+  }
+
+  setCustomLocationUpdater(updater: CustomLocationUpdater | null) {
+    this._customLocationUpdater = updater;
   }
 
   async getLastKnownLocation() {
+    if (this._customLocationUpdater) {
+      this._lastKnownLocation = this._customLocationUpdater.getLocation();
+      return this._lastKnownLocation;
+    }
     if (!this._lastKnownLocation) {
       let lastKnownLocation;
 
@@ -196,7 +207,11 @@ export class LocationManager implements ILocationManager{
     this._requestsAlwaysUse = requestsAlwaysUse;
   }
 
-  _onUpdate(location: Location) {
+  _onUpdate(newLocation: Location) {
+    let location = newLocation;
+    if (this._customLocationUpdater) {
+      location = this._customLocationUpdater.getLocation();
+    }
     this._lastKnownLocation = location;
 
     this._listeners.forEach((l) => l(location));
@@ -224,34 +239,8 @@ export class LocationManager implements ILocationManager{
   }
 }
 
-export interface ILocationManager {
-  getLastKnownLocation(): Promise<any>;
-
-  addListener(listener: (location: Location) => void): void;
-
-  removeListener(listener: (location: Location) => void): void;
-
-  removeAllListeners(): void;
-
-  start(displacement: number): void;
-
-  stop(): void;
-
-  setMinDisplacement(minDisplacement: number): void;
-
-  setRequestsAlwaysUse(requestsAlwaysUse: boolean): void;
-
-  /**
-   * Sets the period at which location events will be sent over the React Native bridge.
-   * The default is 0, aka no limit. [V10, iOS only]
-   *
-   * @example
-   * locationManager.setLocationEventThrottle(500);
-   *
-   * @param {Number} throttleValue event throttle value in ms.
-   * @return {void}
-   */
-  setLocationEventThrottle(throttleValue: number): void;
+export interface CustomLocationUpdater {
+  getLocation(): Location;
 }
 
 export default new LocationManager();

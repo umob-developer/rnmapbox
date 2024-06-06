@@ -47,7 +47,7 @@ interface Coordinates {
 /**
  * LocationManager is a singleton, see `locationManager`
  */
-export declare class LocationManager implements ILocationManager {
+export declare class LocationManager {
     _listeners: ((location: Location) => void)[];
     _lastKnownLocation: Location | null;
     _isListening: boolean;
@@ -55,7 +55,9 @@ export declare class LocationManager implements ILocationManager {
     subscription: EmitterSubscription | null;
     _appStateListener: NativeEventSubscription;
     _minDisplacement?: number;
+    _customLocationUpdater: CustomLocationUpdater | null;
     constructor();
+    setCustomLocationUpdater(updater: CustomLocationUpdater | null): void;
     getLastKnownLocation(): Promise<Location | null>;
     addListener(listener: (location: Location) => void): void;
     removeListener(listener: (location: Location) => void): void;
@@ -65,7 +67,7 @@ export declare class LocationManager implements ILocationManager {
     stop(): void;
     setMinDisplacement(minDisplacement: number): void;
     setRequestsAlwaysUse(requestsAlwaysUse: boolean): void;
-    _onUpdate(location: Location): void;
+    _onUpdate(newLocation: Location): void;
     /**
      * simulates location updates, experimental  [V10, iOS only]
      */
@@ -82,26 +84,8 @@ export declare class LocationManager implements ILocationManager {
      */
     setLocationEventThrottle(throttleValue: number): void;
 }
-export interface ILocationManager {
-    getLastKnownLocation(): Promise<any>;
-    addListener(listener: (location: Location) => void): void;
-    removeListener(listener: (location: Location) => void): void;
-    removeAllListeners(): void;
-    start(displacement: number): void;
-    stop(): void;
-    setMinDisplacement(minDisplacement: number): void;
-    setRequestsAlwaysUse(requestsAlwaysUse: boolean): void;
-    /**
-     * Sets the period at which location events will be sent over the React Native bridge.
-     * The default is 0, aka no limit. [V10, iOS only]
-     *
-     * @example
-     * locationManager.setLocationEventThrottle(500);
-     *
-     * @param {Number} throttleValue event throttle value in ms.
-     * @return {void}
-     */
-    setLocationEventThrottle(throttleValue: number): void;
+export interface CustomLocationUpdater {
+    getLocation(): Location;
 }
 declare const _default: LocationManager;
 export default _default;
