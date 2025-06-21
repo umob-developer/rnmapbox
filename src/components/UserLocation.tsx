@@ -123,6 +123,9 @@ type Props = {
    */
   visible?: boolean;
 
+  /**
+  * Force a mock user location, ignoring the device location updates.
+  */
   mockLocation?: Location;
 };
 
