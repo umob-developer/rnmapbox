@@ -6,6 +6,8 @@ export { default as PointInMapView } from './PointInMapView';
 export { default as ShowAndHideLayer } from './ShowAndHideLayer';
 export { default as ShowClick } from './ShowClick';
 export { default as ShowMap } from './ShowMap';
+export { default as MapUnMount } from './MapUnMount';
+export { default as MapFps } from './MapFps';
 export { default as ShowMapLocalStyle } from './ShowMapLocalStyle';
 export { default as ShowRegionDidChange } from './ShowRegionDidChange';
 export { default as SourceLayerVisibility } from './SourceLayerVisibility';

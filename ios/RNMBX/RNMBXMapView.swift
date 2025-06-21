@@ -5,18 +5,55 @@ import MapKit
 public typealias RNMBXMapViewFactoryFunc = (String, UIView) -> (MapView?)
 
 /**
+ * InitWaiter: simple waiters gets queued unitl the init happens
+ */
+class InitWaiter<Type> {
+  var object: Type? = nil;
+  typealias Callback = (_ t:Type) -> Void;
+  var waiters: [Callback] = []
+
+  /// if the object has value call immediately, otherwise queue
+  func callOrWait(_ callback: @escaping Callback) {
+    if let object = object {
+      callback(object)
+      assert(waiters.count == 0, "the object is inited but there are still waiters")
+    } else {
+      waiters.append(callback)
+    }
+  }
+
+  func hasInited() -> Bool {
+    return object != nil
+  }
+
+  /// call whan the object has inited, queued calls will be executed
+  func onInit(_ object: Type) {
+    self.object = object
+    let oldWaiters = waiters
+    waiters = []
+    oldWaiters.forEach { $0(object) }
+  }
+
+  /// reset, calls will be queued again
+  func reset() {
+    self.object = nil
+  }
+}
+
+
+/**
  * Experimental MapView factory for advanced usecases
  */
 public class RNMBXMapViewFactory {
   private static var factories: [String: RNMBXMapViewFactoryFunc] = [:];
-  
+
   static func get(_ id: String) -> RNMBXMapViewFactoryFunc? {
     if let id = id.split(separator: ":", maxSplits: 1).first {
       return factories[String(id)]
     }
     return nil
   }
-  
+
   public static func register(_ id: String, factory: @escaping RNMBXMapViewFactoryFunc) {
     factories.updateValue(factory, forKey: id)
   }
@@ -117,37 +154,53 @@ class RNMBXCameraChanged : RNMBXEvent, RCTEvent {
 }
 
 @objc(RNMBXMapView)
-open class RNMBXMapView: UIView {
+open class RNMBXMapView: UIView, RCTInvalidating {
+  
+  public func invalidate() {
+    self.removeAllFeaturesFromMap(reason: .ViewRemoval)
+
+#if RNMBX_11
+    cancelables.forEach { $0.cancel() }
+    cancelables.removeAll()
+#endif
+    
+    _mapView.gestures.delegate = nil
+    _mapView.removeFromSuperview()
+    _mapView = nil
+    
+    self.removeFromSuperview()
+  }
+  
   var imageManager: ImageManager = ImageManager()
 
   var tapDelegate: IgnoreRNMBXMakerViewGestureDelegate? = nil
-  
+
   var eventDispatcher: RCTEventDispatcherProtocol
-  
+
   var reactOnPress : RCTBubblingEventBlock?
   var reactOnLongPress : RCTBubblingEventBlock?
   var reactOnMapChange : RCTBubblingEventBlock?
-  
+
   @objc
   var onCameraChanged: RCTDirectEventBlock?
-  
-  var styleLoaded: Bool = false
-  var styleLoadWaiters : [(MapboxMap)->Void] = []
-  
+
+  var styleLoadWaiters = InitWaiter<MapboxMap>()
+  var cameraWaiters = InitWaiter<MapView>()
+
   var features: [FeatureEntry] = []
-  
+
   weak var reactCamera : RNMBXCamera?
   var images : [RNMBXImages] = []
   var sources : [RNMBXInteractiveElement] = []
-  
+
   var handleMapChangedEvents = Set<RNMBXEvent.EventType>()
-  
+
   var eventListeners : [Cancelable] = []
-  
+
   private var isPendingInitialLayout = true
   private var wasGestureActive = false
   private var isGestureActive = false
-  
+
   var layerWaiters : [String:[(String) -> Void]] = [:]
 
   @objc
@@ -155,23 +208,23 @@ open class RNMBXMapView: UIView {
 
   @objc
   public var mapViewImpl : String? = nil
-  
+
 #if RNMBX_11
   var cancelables = Set<AnyCancelable>()
 #endif
-  
+
   lazy var pointAnnotationManager : RNMBXPointAnnotationManager = {
     let result = RNMBXPointAnnotationManager(annotations: mapView.annotations, mapView: mapView)
     self._removeMapboxLongPressGestureRecognizer()
     return result
   }()
-  
+
   lazy var calloutAnnotationManager : MapboxMaps.PointAnnotationManager = {
     return mapView.annotations.makePointAnnotationManager(id: "RNMBX-mapview-callouts")
   }()
-  
+
   var _mapView: MapView! = nil
-  func createMapView() {
+  func createMapView() -> MapView {
     if let mapViewImpl = mapViewImpl, let mapViewInstance = createAndAddMapViewImpl(mapViewImpl, self) {
       _mapView = mapViewInstance
     } else {
@@ -188,10 +241,11 @@ open class RNMBXMapView: UIView {
       _mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       addSubview(_mapView)
     }
-    
+
     _mapView.gestures.delegate = self
     setupEvents()
     afterMapViewAdded()
+    return _mapView
   }
 
   func createAndAddMapViewImpl(_ impl: String, _ view: RNMBXMapView) -> MapView? {
@@ -203,26 +257,29 @@ open class RNMBXMapView: UIView {
     }
   }
 
+  @available(*, deprecated, renamed: "withMapView", message: "mapView can be nil if the map initialization has not finished, use withMapView instead")
   public var mapView : MapView! {
     get { return _mapView }
   }
+
+  @available(*, deprecated, renamed: "withMapboxMap", message: "mapboxMap can be nil if the map initialization has not finished, use withMapboxMap instead")
   var mapboxMap: MapboxMap! {
-    get { _mapView.mapboxMap }
+    get { _mapView?.mapboxMap }
   }
 
   @objc public func addToMap(_ subview: UIView) {
-    withMapView {
+    withMapView { mapView in
       if let mapComponent = subview as? RNMBXMapComponent {
-        let style = self.mapView.mapboxMap.style
+        let style = mapView.mapboxMap.style
         var addToMap = false
         if mapComponent.waitForStyleLoad() {
-          if (self.styleLoaded) {
+          if (self.styleLoadWaiters.hasInited()) {
             addToMap = true
           }
         } else {
           addToMap = true
         }
-        
+
         let entry = FeatureEntry(feature: mapComponent, view: subview, addedToMap: false)
         if (addToMap) {
           mapComponent.addToMap(self, style: style)
@@ -237,7 +294,7 @@ open class RNMBXMapView: UIView {
       }
     }
   }
-  
+
   @objc public func removeFromMap(_ subview: UIView) {
     if let mapComponent = subview as? RNMBXMapComponent {
       var entryIndex = features.firstIndex { $0.view == subview }
@@ -261,7 +318,7 @@ open class RNMBXMapView: UIView {
     addToMap(subview)
     super.insertReactSubview(subview, at: atIndex)
   }
-  
+
   @objc open override func removeReactSubview(_ subview: UIView!) {
     removeFromMap(subview)
     super.removeReactSubview(subview)
@@ -271,15 +328,15 @@ open class RNMBXMapView: UIView {
     self.eventDispatcher = eventDispatcher
     super.init(frame: frame)
   }
-  
+
   public required init (coder: NSCoder) {
     fatalError("not implemented")
   }
-  
+
   func layerAdded (_ layer: Layer) {
     // TODO
   }
-  
+
   func waitForLayerWithID(_ layerId: String, _  callback: @escaping (_ layerId: String) -> Void) {
     let style = mapView.mapboxMap.style;
     if style.layerExists(withId: layerId) {
@@ -288,23 +345,23 @@ open class RNMBXMapView: UIView {
       layerWaiters[layerId, default: []].append(callback)
     }
   }
-  
+
   @objc public override func layoutSubviews() {
     super.layoutSubviews()
     if let camera = reactCamera {
       if (isPendingInitialLayout) {
         isPendingInitialLayout = false;
-        
+
         camera.initialLayout()
       }
     }
   }
-  
-  
+
+
   // MARK: - React Native properties
   let changes : PropertyChanges<RNMBXMapView> = PropertyChanges()
-  var mapViewWaiters : [()->Void] = []
-  
+  var mapViewWaiters = InitWaiter<MapView>()
+
   enum Property : String {
     case projection
     case localizeLabels
@@ -321,7 +378,8 @@ open class RNMBXMapView: UIView {
     case onMapChange
     case styleURL
     case gestureSettings
-    
+    case preferredFramesPerSecond
+
     func apply(_ map: RNMBXMapView) -> Void {
       switch self {
       case .projection:
@@ -355,24 +413,32 @@ open class RNMBXMapView: UIView {
         map.applyPitchEnabled()
       case .gestureSettings:
         map.applyGestureSettings()
+      case .preferredFramesPerSecond:
+        map.applyPreferredFramesPerSecond()
       }
     }
   }
-  
+
   func changed(_ property: Property) {
     changes.add(name: property.rawValue, update: property.apply)
   }
-  
-  func withMapView(callback: @escaping () -> Void) {
-    if _mapView != nil {
-      callback()
+
+  func withMapView(callback: @escaping (_: MapView) -> Void) {
+    mapViewWaiters.callOrWait(callback)
+  }
+
+  func withMapboxMap(callback: @escaping (_: MapboxMap) -> Void) {
+    if let mapboxMap = _mapView?.mapboxMap {
+      callback(mapboxMap)
     } else {
-      mapViewWaiters.append(callback)
+      mapViewWaiters.callOrWait { mapView in
+        callback(mapView.mapboxMap)
+      }
     }
   }
-  
+
   var projection: StyleProjection?
-  
+
   @objc public func setReactProjection(_ value: String?) {
     if let value = value {
       projection = StyleProjection(name: value == "globe" ? .globe : .mercator)
@@ -381,7 +447,7 @@ open class RNMBXMapView: UIView {
     }
     changed(.projection)
   }
-  
+
   func applyProjection() {
     logged("RNMBXMapView.setReactProjection") {
       if let projection = projection {
@@ -389,9 +455,26 @@ open class RNMBXMapView: UIView {
       }
     }
   }
-  
+
+  var preferredFramesPerSecond: Int? = nil
+
+  @objc public func setReactPreferredFramesPerSecond(_ value: Int) {
+    self.preferredFramesPerSecond = value
+    changed(.preferredFramesPerSecond)
+  }
+
+  func applyPreferredFramesPerSecond() {
+    if let value = preferredFramesPerSecond {
+      if #available(iOS 15.0, *) {
+        self.mapView.preferredFrameRateRange = CAFrameRateRange(minimum: 1, maximum: Float(value))
+      } else {
+        self.mapView.preferredFramesPerSecond = value
+      }
+    }
+  }
+
   var locale: (layerIds: [String]?, locale: Locale)? = nil
-  
+
   @objc public func setReactLocalizeLabels(_ value: NSDictionary?) {
     if let value = value {
       let localeString = value["locale"] as! String
@@ -401,7 +484,7 @@ open class RNMBXMapView: UIView {
     }
     changed(.localizeLabels)
   }
-  
+
   func applyLocalizeLabels() {
     onMapStyleLoaded { _ in
       logged("RNMBXMapView.\(#function)") {
@@ -411,7 +494,7 @@ open class RNMBXMapView: UIView {
       }
     }
   }
-  
+
   struct GestureSettings {
     var doubleTapToZoomInEnabled: Bool? = nil;
     var doubleTouchToZoomOutEnabled: Bool? = nil;
@@ -426,9 +509,9 @@ open class RNMBXMapView: UIView {
     var simultaneousRotateAndPinchZoomEnabled: Bool? = nil;
     #endif
   }
-  
+
   var gestureSettings = GestureSettings()
-  
+
   @objc
   public func setReactGestureSettings(_ value: NSDictionary?) {
     if let value = value {
@@ -479,11 +562,11 @@ open class RNMBXMapView: UIView {
        options.zoomAnimationAmount = zoomAnimationAmount.CGFloat
        }*/
       gestureSettings = options
-      
+
       changed(.gestureSettings)
     }
   }
-  
+
   func applyGestureSettings() {
     if let gestures = self.mapView?.gestures {
       var options = gestures.options
@@ -533,15 +616,15 @@ open class RNMBXMapView: UIView {
       }
     }
   }
-  
+
   var attributionEnabled: OrnamentVisibility? = nil
   var attributionOptions: (position: OrnamentPosition, margins: CGPoint)? = nil
-  
+
   @objc public func setReactAttributionEnabled(_ value: Bool) {
     attributionEnabled = value ? .visible : .hidden
     changed(.attribution)
   }
-  
+
   func applyAttribution() {
     if let visibility = attributionEnabled {
       mapView.ornaments.options.attributionButton.visibility = visibility
@@ -551,25 +634,25 @@ open class RNMBXMapView: UIView {
       mapView.ornaments.options.attributionButton.margins = options.margins
     }
   }
-  
+
   @objc public func setReactAttributionPosition(_ position: [String: NSNumber]) {
     attributionOptions = self.getOrnamentOptionsFromPosition(position)
     changed(.attribution)
   }
-  
+
   var logoEnabled: OrnamentVisibility? = nil
   var logoOptions: (position: OrnamentPosition, margins: CGPoint)? = nil
-  
+
   @objc public func setReactLogoEnabled(_ value: Bool) {
     logoEnabled = value ? .visible : .hidden
     changed(.logo)
   }
-  
+
   @objc public func setReactLogoPosition(_ position: [String: NSNumber]) {
     logoOptions = self.getOrnamentOptionsFromPosition(position)
     changed(.logo)
   }
-  
+
   func applyLogo() {
     if let visibility = logoEnabled {
       mapView.ornaments.options.logo.visibility = visibility
@@ -579,7 +662,7 @@ open class RNMBXMapView: UIView {
       mapView.ornaments.options.logo.margins = options.margins
     }
   }
-  
+
   var compassEnabled: Bool = false
   var compassPosition: OrnamentPosition? = nil
   var compassMargins: CGPoint? = nil
@@ -595,7 +678,7 @@ open class RNMBXMapView: UIView {
     compassFadeWhenNorth = value
     changed(.compass)
   }
-  
+
   @objc public func setReactCompassPosition(_ position: [String: NSNumber]) {
     if let compassOptions = self.getOrnamentOptionsFromPosition(position) {
       compassPosition = compassOptions.position
@@ -608,7 +691,7 @@ open class RNMBXMapView: UIView {
     compassPosition = toOrnamentPositon(Int(truncating: NSNumber(value: position)))
     changed(.compass)
   }
-  
+
   @objc public func setReactCompassViewMargins(_ margins: CGPoint) {
     compassMargins = margins
     changed(.compass)
@@ -618,21 +701,21 @@ open class RNMBXMapView: UIView {
     compassImage = image.isEmpty ? nil : image
     changed(.compass)
   }
-    
+
   func applyCompass() {
     var visibility: OrnamentVisibility = .hidden
     if compassEnabled {
       visibility = compassFadeWhenNorth ? .adaptive : .visible
     }
     mapView.ornaments.options.compass.visibility = visibility
-    
+
     if let position = compassPosition {
       mapView.ornaments.options.compass.position = position
     }
     if let margina = compassMargins {
       mapView.ornaments.options.compass.margins = margina
     }
-    
+
     if let compassImage = compassImage {
       onMapStyleLoaded { map in
         let img = map.style.image(withId: compassImage)
@@ -644,7 +727,7 @@ open class RNMBXMapView: UIView {
       self.mapView.ornaments.options.compass.image = nil
     }
   }
-  
+
   func toOrnamentPositon(_ position: Int) -> OrnamentPosition {
     enum MapboxGLPosition : Int {
       case topLeft = 0
@@ -652,7 +735,7 @@ open class RNMBXMapView: UIView {
       case bottomLeft = 2
       case bottomRight = 3
     };
-    
+
     let glPosition = MapboxGLPosition(rawValue: position)
     switch glPosition {
     case .topLeft:
@@ -671,19 +754,19 @@ open class RNMBXMapView: UIView {
   var scaleBarEnabled: Bool? = nil
   var scaleBarPosition: OrnamentPosition? = nil
   var scaleBarMargins: CGPoint? = nil
-  
+
   @objc public func setReactScaleBarEnabled(_ value: Bool) {
     scaleBarEnabled = value
     changed(.scaleBar)
   }
-  
+
   @objc public func setReactScaleBarPosition(_ position: [String: NSNumber]) {
     if let ornamentOptions = self.getOrnamentOptionsFromPosition(position) {
       scaleBarPosition = ornamentOptions.position
       scaleBarMargins = ornamentOptions.margins
     }
   }
-  
+
   func applyScaleBar() {
     if let enabled = scaleBarEnabled {
       mapView.ornaments.options.scaleBar.visibility = enabled ? .visible : .hidden
@@ -698,10 +781,9 @@ open class RNMBXMapView: UIView {
 
   @objc override public func didSetProps(_ props: [String]) {
     if (_mapView == nil) {
-      createMapView()
-      
-      mapViewWaiters.forEach { $0() }
-      mapViewWaiters.removeAll()
+      let view = createMapView()
+
+      mapViewWaiters.onInit(view)
     }
     changes.apply(self)
   }
@@ -725,7 +807,7 @@ open class RNMBXMapView: UIView {
     self.scrollEnabled = value
     changed(.scrollEnabled)
   }
-  
+
   func applyScrollEnabled() {
     if let value = scrollEnabled {
       self.mapView.gestures.options.panEnabled = value
@@ -738,14 +820,14 @@ open class RNMBXMapView: UIView {
     rotateEnabled = value
     changed(.rotateEnabled)
   }
-  
+
   func applyRotateEnabled() {
     if let value = rotateEnabled {
       self.mapView.gestures.options.rotateEnabled = value
     }
   }
 
-  
+
   var pitchEnabled: Bool? = nil
   @objc public func setReactPitchEnabled(_ value: Bool) {
     self.pitchEnabled = value
@@ -774,26 +856,27 @@ open class RNMBXMapView: UIView {
       }
     }
   }
-  
+
   func refreshComponentsBeforeStyleChange() {
     removeAllFeaturesFromMap(reason: .StyleChange)
   }
-  
+
   func refreshComponentsAfterStyleChange(style: Style) {
       addFeaturesToMap(style: style)
   }
-  
+
   var reactStyleURL: String? = nil
   @objc public func setReactStyleURL(_ value: String?) {
     self.reactStyleURL = value
     changed(.styleURL)
   }
-  
+
   public func applyStyleURL() {
-    var initialLoad = !self.styleLoaded
+    var initialLoad = !self.styleLoadWaiters.hasInited()
     if !initialLoad { refreshComponentsBeforeStyleChange() }
-    self.styleLoaded = false
     if let value = reactStyleURL {
+      self.styleLoadWaiters.reset()
+
       if let _ = URL(string: value) {
           if let styleURI = StyleURI(rawValue: value) {
               mapView.mapboxMap.loadStyleURI(styleURI)
@@ -821,7 +904,7 @@ open class RNMBXMapView: UIView {
     let right = position["right"]
     let top = position["top"]
     let bottom = position["bottom"]
-    
+
     if let left = left, let top = top {
       return (OrnamentPosition.topLeading, CGPoint(x: Int(truncating: left), y: Int(truncating: top)))
     } else if let right = right, let top = top {
@@ -831,7 +914,7 @@ open class RNMBXMapView: UIView {
     } else if let bottom = bottom, let left = left {
       return (OrnamentPosition.bottomLeading, CGPoint(x: Int(truncating: left), y: Int(truncating: bottom)))
     }
-    
+
     return nil
   }
 
@@ -842,7 +925,7 @@ open class RNMBXMapView: UIView {
       }
     }
   }
-  
+
   // MARK: - hooks for subclasses
   open func afterMapViewAdded() {}
 }
@@ -859,7 +942,7 @@ extension RNMBXMapView {
       handler(self, mapEvent)
     }.store(in: &cancelables)
   }
-  
+
   private func onNext<T>(event: MapEventType<T>, handler: @escaping (RNMBXMapView, T) -> Void) {
     let signal = event.method(self.mapView.mapboxMap)
     signal.observeNext { [weak self] (mapEvent) in
@@ -915,7 +998,7 @@ extension RNMBXMapView {
         let event = RNMBXEvent(type:.mapIdle, payload: self.buildStateObject());
         self.fireEvent(event: event, callback: self.reactOnMapChange)
       }
-      
+
       self.wasGestureActive = false
     })
   }
@@ -931,11 +1014,11 @@ extension RNMBXMapView {
   private func fireEvent(event: RNMBXEvent, callback: @escaping RCTBubblingEventBlock) {
     callback(event.toJSON())
   }
-  
+
   private func buildStateObject() -> [String: Any] {
     let cameraOptions = CameraOptions(cameraState: mapView.cameraState)
     let bounds = mapView.mapboxMap.coordinateBounds(for: cameraOptions)
-    
+
     return [
       "properties": [
         "center": Point(mapView.cameraState.center).coordinates.toArray(),
@@ -953,7 +1036,7 @@ extension RNMBXMapView {
       "timestamp": timestamp()
     ]
   }
-  
+
   private func timestamp(date: Date? = nil) -> Double {
     return (date ?? Date()).timeIntervalSince1970 * 1000
   }
@@ -981,7 +1064,7 @@ extension RNMBXMapView {
       try result.toJSON()
     }
   }
-  
+
   public func setupEvents() {
     self.onEvery(event: .mapLoadingError, handler: { (self, event) in
       let eventPayload : MapLoadingErrorPayload = event.payload
@@ -1008,10 +1091,10 @@ extension RNMBXMapView {
         Logger.log(level: .error, message: "MapLoad error \(event)")
       }
     })
-    
+
     self.onEvery(event: .styleImageMissing) { (self, event) in
       let imageName = event.payload.id
-      
+
       self.images.forEach {
         if $0.addMissingImageToStyle(style: self.mapboxMap.style, imageName: imageName) {
           return
@@ -1041,17 +1124,12 @@ extension RNMBXMapView {
       let event = RNMBXEvent(type:.didFinishLoadingMap, payload: nil);
       self.fireEvent(event: event, callback: self.reactOnMapChange)
     })
-    
+
     self.onEvery(event: .styleLoaded, handler: { (self, event) in
       self.addFeaturesToMap(style: self.mapboxMap.style)
-      
-      if !self.styleLoaded {
-        self.styleLoaded = true
-        if let mapboxMap = self.mapboxMap {
-          let waiters = self.styleLoadWaiters
-          self.styleLoadWaiters = []
-          waiters.forEach { $0(mapboxMap) }
-        }
+
+      if !self.styleLoadWaiters.hasInited(), let mapboxMap = self.mapboxMap {
+        self.styleLoadWaiters.onInit(mapboxMap)
       }
 
       let event = RNMBXEvent(type:.didFinishLoadingStyle, payload: nil)
@@ -1068,7 +1146,7 @@ class IgnoreRNMBXMakerViewGestureDelegate : NSObject, UIGestureRecognizerDelegat
   init(originalDelegate: UIGestureRecognizerDelegate?) {
     self.originalDelegate = originalDelegate
   }
-  
+
   func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
     return originalDelegate?.gestureRecognizerShouldBegin?(gestureRecognizer) ?? true
   }
@@ -1076,7 +1154,7 @@ class IgnoreRNMBXMakerViewGestureDelegate : NSObject, UIGestureRecognizerDelegat
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
     return originalDelegate?.gestureRecognizer?(gestureRecognizer,shouldRecognizeSimultaneouslyWith: otherGestureRecognizer) ?? false
   }
-  
+
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer) -> Bool {
     return originalDelegate?.gestureRecognizer?(gestureRecognizer,shouldRequireFailureOf: otherGestureRecognizer) ?? false
   }
@@ -1095,19 +1173,19 @@ class IgnoreRNMBXMakerViewGestureDelegate : NSObject, UIGestureRecognizerDelegat
     }
     return false
   }
-  
+
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
     if let view = touch.view, isMarkerViewSubview(view) {
       return false
     }
     return originalDelegate?.gestureRecognizer?(gestureRecognizer,shouldReceive: touch) ?? true
   }
-  
+
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive press: UIPress) -> Bool {
     return originalDelegate?.gestureRecognizer?(gestureRecognizer,shouldReceive: press) ?? true
   }
 
-  
+
   @available(iOS 13.4, *)
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive event: UIEvent) -> Bool {
         return originalDelegate?.gestureRecognizer?(gestureRecognizer,shouldReceive: event) ?? true
@@ -1115,12 +1193,12 @@ class IgnoreRNMBXMakerViewGestureDelegate : NSObject, UIGestureRecognizerDelegat
 }
 
 extension RNMBXMapView {
-  
+
   @objc public func setReactOnPress(_ value: @escaping RCTBubblingEventBlock) {
     self.reactOnPress = value
     changed(.onPress)
   }
-  
+
   func applyOnPress() {
     let singleTapGestureRecognizer = self.mapView.gestures.singleTapGestureRecognizer
 
@@ -1135,7 +1213,7 @@ extension RNMBXMapView {
     self.reactOnLongPress = value
     changed(.onLongPress)
   }
-  
+
   func applyOnLongPress() {
     if (reactOnLongPress != nil) {
       let longPressGestureRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(doHandleLongPress(_:)))
@@ -1166,13 +1244,13 @@ extension RNMBXMapView: GestureManagerDelegate {
     DispatchQueue.main.async {
       if let source = sources.first {
         let hitbox = source.hitbox;
-        
+
         let halfWidth = (hitbox["width"]?.doubleValue ?? RNMBXInteractiveElement.hitboxDefault) / 2.0;
         let halfHeight = (hitbox["height"]?.doubleValue  ?? RNMBXInteractiveElement.hitboxDefault) / 2.0;
 
         let top = tapPoint.y - halfHeight;
         let left = tapPoint.x - halfWidth;
-        
+
         let hitboxRect = CGRect(x: left, y: top, width: halfWidth * 2.0, height: halfHeight * 2.0)
 
         let options = RenderedQueryOptions(
@@ -1180,7 +1258,7 @@ extension RNMBXMapView: GestureManagerDelegate {
         )
         self.mapboxMap.queryRenderedFeatures(with: hitboxRect, options: options) {
           result in
-          
+
           var newHits = hits
           var newTouchedSources = touchedSources;
           switch result {
@@ -1202,10 +1280,10 @@ extension RNMBXMapView: GestureManagerDelegate {
       }
     }
   }
-  
+
   func highestZIndex(sources: [RNMBXInteractiveElement]) -> RNMBXInteractiveElement? {
     var layersToSource : [String:RNMBXInteractiveElement] = [:]
-    
+
     sources.forEach { source in
       source.getLayerIDs().forEach { layerId in
         if layersToSource[layerId] == nil {
@@ -1216,9 +1294,9 @@ extension RNMBXMapView: GestureManagerDelegate {
     let orderedLayers = mapboxMap.style.allLayerIdentifiers
     return orderedLayers.lazy.reversed().compactMap { layersToSource[$0.id] }.first ?? sources.first
   }
-  
-  
-  
+
+
+
   func _tapEvent(_ tapPoint: CGPoint) -> RNMBXEvent {
     let location = self.mapboxMap.coordinate(for: tapPoint)
     var geojson = Feature(geometry: .point(Point(location)));
@@ -1229,7 +1307,7 @@ extension RNMBXMapView: GestureManagerDelegate {
     let event = RNMBXEvent(type:.tap, payload: logged("reactOnPress") { try geojson.toJSON() })
     return event
   }
-  
+
   @objc
   func doHandleTap(_ sender: UITapGestureRecognizer) {
     let tapPoint = sender.location(in: self)
@@ -1242,7 +1320,7 @@ extension RNMBXMapView: GestureManagerDelegate {
         }
         let touchableSources = self.touchableSources()
         self.doHandleTapInSources(sources: touchableSources, tapPoint: tapPoint, hits: [:], touchedSources: []) { (hits, touchedSources) in
-          
+
           if let source = self.highestZIndex(sources: touchedSources),
              source.hasPressListener,
              let onPress = source.onPress {
@@ -1268,7 +1346,7 @@ extension RNMBXMapView: GestureManagerDelegate {
               ]
             )
             self.fireEvent(event: event, callback: onPress)
-            
+
           } else {
             if let reactOnPress = self.reactOnPress {
               self.fireEvent(event: self._tapEvent(tapPoint), callback: reactOnPress)
@@ -1278,7 +1356,7 @@ extension RNMBXMapView: GestureManagerDelegate {
       }
     }
   }
-  
+
   @objc
   func doHandleLongPress(_ sender: UILongPressGestureRecognizer) {
     let position = sender.location(in: self)
@@ -1331,13 +1409,13 @@ extension RNMBXMapView: GestureManagerDelegate {
   public func gestureManager(_ gestureManager: GestureManager, didBegin gestureType: GestureType) {
     isGestureActive = true
   }
-  
+
   public func gestureManager(_ gestureManager: GestureManager, didEnd gestureType: GestureType, willAnimate: Bool) {
     if !willAnimate {
       isGestureActive = false;
     }
   }
-  
+
   public func gestureManager(_ gestureManager: GestureManager, didEndAnimatingFor gestureType: GestureType) {
     isGestureActive = false;
   }
@@ -1369,31 +1447,57 @@ extension RNMBXMapView {
     guard let mapboxMap = mapboxMap else {
       fatalError("mapboxMap is null")
     }
-    
-    if styleLoaded {
-      block(mapboxMap)
-    } else {
-      styleLoadWaiters.append(block)
-    }
+
+    styleLoadWaiters.callOrWait(block)
   }
 }
+
+typealias LayerSourceDetails = (source: String?, sourceLayer: String?)
+
+#if RNMBX_11
+func getLayerSourceDetails(layer: (any Layer)?) -> LayerSourceDetails? {
+    if let circleLayer = layer as? CircleLayer {
+        return (circleLayer.source, circleLayer.sourceLayer)
+    } else if let fillExtrusionLayer = layer as? FillExtrusionLayer {
+        return (fillExtrusionLayer.source, fillExtrusionLayer.sourceLayer)
+    } else if let fillLayer = layer as? FillLayer {
+        return (fillLayer.source, fillLayer.sourceLayer)
+    } else if let heatmapLayer = layer as? HeatmapLayer {
+        return (heatmapLayer.source, heatmapLayer.sourceLayer)
+    } else if let hillshadeLayer = layer as? HillshadeLayer {
+        return (hillshadeLayer.source, hillshadeLayer.sourceLayer)
+    } else if let lineLayer = layer as? LineLayer {
+        return (lineLayer.source, lineLayer.sourceLayer)
+    } else if let rasterLayer = layer as? RasterLayer {
+        return (rasterLayer.source, rasterLayer.sourceLayer)
+    } else if let symbolLayer = layer as? SymbolLayer {
+        return (symbolLayer.source, symbolLayer.sourceLayer)
+    } else {
+        return nil
+    }
+}
+#endif
 
 extension RNMBXMapView {
   func setSourceVisibility(_ visible: Bool, sourceId: String, sourceLayerId: String?) -> Void {
     let style = self.mapboxMap.style
-    
+
     style.allLayerIdentifiers.forEach { layerInfo in
       let layer = logged("setSourceVisibility.layer", info: { "\(layerInfo.id)" }) {
         try style.layer(withId: layerInfo.id)
       }
+
       #if RNMBX_11
-      // RNMBX_11_TODO
+        let sourceDetails = getLayerSourceDetails(layer: layer)
       #else
-      if let layer = layer {
-        if layer.source == sourceId {
+        let sourceDetails: LayerSourceDetails? = (source: layer?.source, sourceLayer: layer?.sourceLayer)
+      #endif
+
+      if let layer = layer, let sourceDetails = sourceDetails {
+        if sourceDetails.source == sourceId {
           var good = true
           if let sourceLayerId = sourceLayerId {
-            if sourceLayerId != layer.sourceLayer {
+            if sourceLayerId != sourceDetails.sourceLayer {
               good = false
             }
           }
@@ -1406,7 +1510,6 @@ extension RNMBXMapView {
           }
         }
       }
-      #endif
     }
   }
 }
@@ -1414,12 +1517,12 @@ extension RNMBXMapView {
 class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
   weak var selected : RNMBXPointAnnotation? = nil
   private var draggedAnnotation: PointAnnotation?
-  
+
   func annotationManager(_ manager: AnnotationManager, didDetectTappedAnnotations annotations: [Annotation]) {
     // We handle taps ourselfs
     //   onTap(annotations: annotations)
   }
-  
+
   func deselectCurrentlySelected(deselectAnnotationOnTap: Bool = false) -> Bool {
     if let selected = selected {
       selected.doDeselect(deselectAnnotationOnMapTap: deselectAnnotationOnTap)
@@ -1428,15 +1531,15 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
     }
     return false
   }
-  
+
   func onAnnotationClick(pointAnnotation: RNMBXPointAnnotation) {
     let oldSelected = selected
     var newSelected: RNMBXPointAnnotation? = pointAnnotation
-    
+
     if (newSelected == oldSelected) {
       newSelected = nil
     }
-    
+
     deselectCurrentlySelected()
 
     if let newSelected = newSelected {
@@ -1444,7 +1547,7 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
       selected = newSelected
     }
   }
-  
+
   func lookup(_ annotation: PointAnnotation) -> RNMBXPointAnnotation? {
     guard let userInfo = annotation.userInfo else {
         return nil
@@ -1462,13 +1565,13 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
     #endif
     return nil
   }
-  
+
 
   func onTap(annotations: [Annotation]) {
     guard annotations.count > 0 else {
       fatalError("didDetectTappedAnnotations: No annotations found")
     }
-    
+
     for annotation in annotations {
       if let annotation = annotation as? PointAnnotation {
         if let pointAnnotation = lookup(annotation) {
@@ -1477,7 +1580,7 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
       }
     }
   }
-  
+
   func handleTap(_ tap: UITapGestureRecognizer,  noAnnotationFound: @escaping (UITapGestureRecognizer) -> Void) {
     let layerId = manager.layerId
     guard let mapFeatureQueryable = mapView?.mapboxMap else {
@@ -1519,10 +1622,10 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
         }
     }
   }
-  
+
   var manager : MapboxMaps.PointAnnotationManager
   weak var mapView : MapView? = nil
-  
+
   init(annotations: AnnotationOrchestrator, mapView: MapView) {
     manager = annotations.makePointAnnotationManager(id: "RNMBX-mapview-point-annotations")
     manager.delegate = self
@@ -1533,7 +1636,7 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
     guard annotations.count > 0 else {
       fatalError("didDetectDraggedAnnotations: No annotations found")
     }
-    
+
     for annotation in annotations {
       if let pointAnnotation = annotation as? PointAnnotation,
          let pt = lookup(pointAnnotation) {
@@ -1569,7 +1672,7 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
       }
     }
   }
-  
+
   // Used for handling panning to detect annotation dragging
   func handleLongPress(_ sender: UILongPressGestureRecognizer, noAnnotationFound: @escaping (UILongPressGestureRecognizer) -> Void) {
     let layerId = manager.layerId
@@ -1586,7 +1689,7 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
         mapFeatureQueryable.queryRenderedFeatures(
           with: sender.location(in: sender.view),
             options: options) { [weak self] (result) in
-              
+
               guard let self = self else { return }
               switch result {
                 case .success(let queriedFeatures):
@@ -1618,7 +1721,7 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
           guard var annotation = self.draggedAnnotation else {
               return
           }
-        
+
           self.onDragHandler(self.manager, didDetectDraggedAnnotations: [annotation], dragState: .changed, targetPoint: targetPoint)
 
           let idx = self.manager.annotations.firstIndex { an in return an.id == annotation.id }
@@ -1638,18 +1741,18 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
           return
       }
   }
-  
+
   func remove(_ annotation: PointAnnotation) {
     manager.annotations.removeAll(where: {$0.id == annotation.id})
   }
-  
+
   #if RNMBX_11
   var annotations = NSMapTable<NSString, RNMBXPointAnnotation>.init(
         keyOptions: .copyIn,
         valueOptions: .weakMemory
     )
   #endif
-  
+
   func add(_ annotation: PointAnnotation, _ rnmbxPointAnnotation: RNMBXPointAnnotation) {
     manager.annotations.append(annotation)
     manager.refresh()
@@ -1657,15 +1760,15 @@ class RNMBXPointAnnotationManager : AnnotationInteractionDelegate {
     annotations.setObject(rnmbxPointAnnotation, forKey: annotation.id as NSString)
     #endif
   }
-  
+
   func update(_ annotation: PointAnnotation) {
     let index = manager.annotations.firstIndex { $0.id == annotation.id }
-    
+
     guard let index = index else {
       Logger.log(level: .warn, message: "RNMBX - PointAnnotation.refresh: annotation not found")
       return
     }
-    
+
     manager.annotations[index] = annotation
     manager.refresh()
   }

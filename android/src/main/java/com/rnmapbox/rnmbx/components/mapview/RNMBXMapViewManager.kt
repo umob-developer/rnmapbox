@@ -34,13 +34,13 @@ import java.util.HashMap
 
 fun ReadableArray.forEachString(action: (String) -> Unit) {
     for (i in 0 until size()) {
-        action(getString(i))
+        getString(i)?.let { action(it) } ?: Logger.d("RNMBXMapViewManager", "Skipping null string at index $i")
     }
 }
 
 fun ReadableArray.asArrayString(): Array<String> {
     val result = Array<String>(size()) {
-        getString(it)
+        getString(it).toString()
     }
     return result
 }
@@ -86,20 +86,20 @@ open class RNMBXMapViewManager(context: ReactApplicationContext, val viewTagReso
         }
     }
 
-    override fun addView(mapView: RNMBXMapView?, childView: View?, childPosition: Int) {
-        mapView!!.addFeature(childView, childPosition)
+    override fun addView(mapView: RNMBXMapView, childView: View, childPosition: Int) {
+        mapView.addFeature(childView, childPosition)
     }
 
-    override fun getChildCount(mapView: RNMBXMapView?): Int {
-        return mapView!!.featureCount
+    override fun getChildCount(mapView: RNMBXMapView): Int {
+        return mapView.featureCount
     }
 
-    override fun getChildAt(mapView: RNMBXMapView?, index: Int): View? {
-        return mapView!!.getFeatureAt(index)
+    override fun getChildAt(mapView: RNMBXMapView, index: Int): View? {
+        return mapView.getFeatureAt(index)
     }
 
-    override fun removeViewAt(mapView: RNMBXMapView?, index: Int) {
-        mapView!!.removeFeatureAt(index)
+    override fun removeViewAt(mapView: RNMBXMapView, index: Int) {
+        mapView.removeFeatureAt(index)
     }
 
     fun getMapViewContext(themedReactContext: ThemedReactContext): Context {
@@ -140,7 +140,7 @@ open class RNMBXMapViewManager(context: ReactApplicationContext, val viewTagReso
     @ReactProp(name = "localizeLabels")
     override fun setLocalizeLabels(mapView: RNMBXMapView, localeMap: Dynamic) {
         val locale = localeMap.asMap().getString("locale")
-        val layerIds = localeMap.asMap().getArray("layerIds")?.toArrayList()?.mapNotNull {it?.toString()}
+        val layerIds = localeMap.asMap().getArray("layerIds")?.toArrayList()?.mapNotNull {it.toString()}
         mapView.setReactLocalizeLabels(locale, layerIds)
     }
 
@@ -211,8 +211,8 @@ open class RNMBXMapViewManager(context: ReactApplicationContext, val viewTagReso
     }
 
     @ReactProp(name = "preferredFramesPerSecond")
-    fun setPreferredFramesPerSecond(mapView: RNMBXMapView?, preferredFramesPerSecond: Int) {
-        //mapView.setReactPreferredFramesPerSecond(preferredFramesPerSecond);
+    override fun setPreferredFramesPerSecond(mapView: RNMBXMapView, preferredFramesPerSecond: Dynamic) {
+        mapView.setReactPreferredFramesPerSecond(preferredFramesPerSecond.asInt())
     }
 
     @ReactProp(name = "zoomEnabled")
@@ -302,7 +302,7 @@ open class RNMBXMapViewManager(context: ReactApplicationContext, val viewTagReso
 
     @ReactProp(name = "compassViewMargins")
     override fun setCompassViewMargins(mapView: RNMBXMapView, compassViewMargins: Dynamic) {
-        mapView.setReactCompassViewMargins(compassViewMargins.asMap() ?: return)
+        mapView.setReactCompassViewMargins(compassViewMargins.asMap())
     }
 
     @ReactProp(name = "compassViewPosition")
@@ -315,13 +315,13 @@ open class RNMBXMapViewManager(context: ReactApplicationContext, val viewTagReso
         mapView.setReactCompassPosition(compassMargins.asMap())
     }
 
-    @ReactProp(name = "contentInset")
+    @ReactProp(name = "contentInset") @Suppress("UNUSED_PARAMETER")
     fun setContentInset(mapView: RNMBXMapView, array: ReadableArray) {
         // remember to add it to codegen if it will be used
         //mapView.setReactContentInset(array);
     }
 
-    @ReactProp(name = "tintColor", customType = "Color")
+    @ReactProp(name = "tintColor", customType = "Color") @Suppress("UNUSED_PARAMETER")
     fun setTintColor(mapView: RNMBXMapView, tintColor: Int) {
         // remember to add it to codegen if it will be used
         //mapView.setTintColor(tintColor);

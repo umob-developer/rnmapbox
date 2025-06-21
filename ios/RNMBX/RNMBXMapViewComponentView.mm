@@ -25,6 +25,12 @@ using namespace facebook::react;
     RNMBXMapViewComponentView* _componentView;
 }
 
+// Needed because of this: https://github.com/facebook/react-native/pull/37274
++ (void)load
+{
+  [super load];
+}
+
 - (instancetype)initWithComponentView:(RNMBXMapViewComponentView*)componentView {
     if (self = [super init]) {
         _componentView = componentView;
@@ -61,13 +67,13 @@ using namespace facebook::react;
 {
     _eventDispatcher = [[RNMBXMapViewEventDispatcher alloc] initWithComponentView:self];
       _view =  [[RNMBXMapView alloc] initWithFrame:_frame eventDispatcher:_eventDispatcher];
-      
+
       // just need to pass something, it won't really be used on fabric, but it's used to create events (it won't impact sending them)
       _view.reactTag = @-1;
-      
+
       // capture weak self reference to prevent retain cycle
       __weak __typeof__(self) weakSelf = self;
-      
+
       [_view setReactOnPress:^(NSDictionary* event) {
           __typeof__(self) strongSelf = weakSelf;
 
@@ -130,35 +136,23 @@ using namespace facebook::react;
     const auto &oldViewProps = static_cast<const RNMBXMapViewProps &>(*oldProps);
     const auto &newViewProps = static_cast<const RNMBXMapViewProps &>(*props);
   
-    id attributionEnabled = RNMBXConvertFollyDynamicToId(newViewProps.attributionEnabled);
-    if (attributionEnabled != nil) {
-        _view.reactAttributionEnabled = attributionEnabled;
-    }
+    RNMBX_REMAP_OPTIONAL_PROP_BOOL(attributionEnabled, reactAttributionEnabled)
 
     id attributionPosition = RNMBXConvertFollyDynamicToId(newViewProps.attributionPosition);
     if (attributionPosition != nil) {
         _view.reactAttributionPosition = attributionPosition;
     }
 
-    id logoEnabled = RNMBXConvertFollyDynamicToId(newViewProps.logoEnabled);
-    if (logoEnabled != nil) {
-        _view.reactLogoEnabled = logoEnabled;
-    }
+    RNMBX_REMAP_OPTIONAL_PROP_BOOL(logoEnabled, reactLogoEnabled)
 
     id logoPosition = RNMBXConvertFollyDynamicToId(newViewProps.logoPosition);
     if (logoPosition != nil) {
         _view.reactLogoPosition = logoPosition;
     }
 
-    id compassEnabled = RNMBXConvertFollyDynamicToId(newViewProps.compassEnabled);
-    if (compassEnabled != nil) {
-        _view.reactCompassEnabled = compassEnabled;
-    }
+    RNMBX_REMAP_OPTIONAL_PROP_BOOL(compassEnabled, reactCompassEnabled)
 
-    id compassFadeWhenNorth = RNMBXConvertFollyDynamicToId(newViewProps.compassFadeWhenNorth);
-    if (compassFadeWhenNorth != nil) {
-        _view.reactCompassFadeWhenNorth = compassFadeWhenNorth;
-    }
+    RNMBX_REMAP_OPTIONAL_PROP_BOOL(compassFadeWhenNorth, reactCompassFadeWhenNorth)
 
     id compassPosition = RNMBXConvertFollyDynamicToId(newViewProps.compassPosition);
     if (compassPosition != nil) {
@@ -181,34 +175,24 @@ using namespace facebook::react;
         _view.reactCompassImage = compassImage;
     }
 
-    id scaleBarEnabled = RNMBXConvertFollyDynamicToId(newViewProps.scaleBarEnabled);
-    if (scaleBarEnabled != nil) {
-        _view.reactScaleBarEnabled = scaleBarEnabled;
-    }
+    RNMBX_REMAP_OPTIONAL_PROP_BOOL(scaleBarEnabled, reactScaleBarEnabled)
 
     id scaleBarPosition = RNMBXConvertFollyDynamicToId(newViewProps.scaleBarPosition);
     if (scaleBarPosition != nil) {
         _view.reactScaleBarPosition = scaleBarPosition;
     }
 
-    id zoomEnabled = RNMBXConvertFollyDynamicToId(newViewProps.zoomEnabled);
-    if (zoomEnabled != nil) {
-        _view.reactZoomEnabled = zoomEnabled;
-    }
+    RNMBX_REMAP_OPTIONAL_PROP_BOOL(zoomEnabled, reactZoomEnabled)
 
-    id scrollEnabled = RNMBXConvertFollyDynamicToId(newViewProps.scrollEnabled);
-    if (scrollEnabled != nil) {
-        _view.reactScrollEnabled = scrollEnabled;
-    }
+    RNMBX_REMAP_OPTIONAL_PROP_BOOL(scrollEnabled, reactScrollEnabled)
 
-    id rotateEnabled = RNMBXConvertFollyDynamicToId(newViewProps.rotateEnabled);
-    if (rotateEnabled != nil) {
-        _view.reactRotateEnabled = rotateEnabled;
-    }
+    RNMBX_REMAP_OPTIONAL_PROP_BOOL(rotateEnabled, reactRotateEnabled)
+    
+    RNMBX_REMAP_OPTIONAL_PROP_BOOL(pitchEnabled, reactPitchEnabled)
 
-    id pitchEnabled = RNMBXConvertFollyDynamicToId(newViewProps.pitchEnabled);
-    if (pitchEnabled != nil) {
-        _view.reactPitchEnabled = pitchEnabled;
+    id preferredFramesPerSecond = RNMBXConvertFollyDynamicToId(newViewProps.preferredFramesPerSecond);
+    if (preferredFramesPerSecond != nil) {
+        _view.reactPreferredFramesPerSecond = [preferredFramesPerSecond integerValue];
     }
 
     id projection = RNMBXConvertFollyDynamicToId(newViewProps.projection);
@@ -220,7 +204,7 @@ using namespace facebook::react;
     if (localizeLabels != nil) {
         _view.reactLocalizeLabels = localizeLabels;
     }
-  
+
     RNMBX_OPTIONAL_PROP_BOOL(deselectAnnotationOnTap);
 
     id styleURL = RNMBXConvertFollyDynamicToId(newViewProps.styleURL);

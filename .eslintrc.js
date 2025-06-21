@@ -80,7 +80,7 @@ module.exports = {
     'react-native/no-inline-styles': 0,
     '@typescript-eslint/no-explicit-any': ['error', { ignoreRestArgs: true }],
   },
-  ignorePatterns: ['**/rnmapbox.web.symlink', 'plugin/build/'],
+  ignorePatterns: ['**/rnmapbox.web.symlink', 'plugin/build/', 'example/dist'],
   overrides: [
     {
       // Match TypeScript Files
@@ -91,6 +91,7 @@ module.exports = {
           './tsconfig.json',
           './example/tsconfig.json',
           './scripts/tsconfig.json',
+          './plugin/tsconfig.eslint.json',
           './plugin/src/__tests__/tsconfig.eslint.json',
         ],
       },
