@@ -125,7 +125,7 @@ class RNMBXOfflineModule(private val mReactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun removeListeners(count: Int?) {
+    fun removeListeners(count: Double) {
         // Remove upstream listeners, stop unnecessary background tasks
     }
 
