@@ -11,7 +11,7 @@ class RNMBXLocation: NSObject {
 
   var timestamp: Date? = nil
 
-  func toJSON() -> [String:Any?] {
+  func toJSON() -> NSDictionary {
     var coords: [String:Any?] = [:]
     
     if let location = location {
@@ -250,12 +250,12 @@ class RNMBXLocationModule: RCTEventEmitter {
     locationHeadingObserver = nil
     throttler.cancel()
   }
-  
-  @objc func getLastKnownLocation() -> RNMBXLocation? {
+
+  @objc func getLastKnownLocation() -> NSDictionary? {
     let last = RNMBXLocation()
     last.heading = _locationProvider.latestHeading
     last.location = _locationProvider.getLastObservedLocation()
-    return last
+    return last.toJSON()
   }
   
   @objc

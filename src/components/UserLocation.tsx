@@ -252,6 +252,9 @@ class UserLocation extends React.Component<Props, UserLocationState> {
     if (!this._isMounted || !location) {
       return;
     }
+    if(!location.coords?.latitude) return;
+    if(!location.coords?.longitude) return;
+
     let coordinates = null;
     let heading = null;
 
