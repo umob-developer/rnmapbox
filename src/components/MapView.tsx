@@ -1171,6 +1171,15 @@ class MapView extends NativeBridgeComponent(
       }
     }
 
+    // apply patch from https://github.com/rnmapbox/maps/issues/3756
+    if (mapView == null) {
+      mapView = (
+        <RNMBXMapView {...props} {...callbacks}>
+          {this.props.children}
+        </RNMBXMapView>
+      )
+    }
+
     return (
       <View
         onLayout={this._onLayout}
