@@ -36,7 +36,7 @@ on:
 jobs:
   build:
     name: iOS Example Build ${{ inputs.NEW_ARCH && 'Fabric' || 'Paper' }} ${{ inputs.MAP_IMPL }}
-    runs-on: macos-13
+    runs-on: macos-15
     timeout-minutes: 55
     environment: ${{ inputs.env_name }}
 
@@ -122,7 +122,9 @@ jobs:
           brew install xcbeautify
 
       - name: Build for detox
-        run: set -o pipefail && NSUnbufferedIO=YES  yarn detox build --configuration ios.debug.ci 2>&1
+        run: |
+          xcodebuild -version
+          set -o pipefail && NSUnbufferedIO=YES  yarn detox build --configuration ios.debug.ci 2>&1
 
       - name: Test with detox
         if: inputs.NEW_ARCH != 1

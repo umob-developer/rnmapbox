@@ -12,7 +12,7 @@ class RNMBXLocation: NSObject {
   var timestamp: Date? = nil
 
   func toJSON() -> NSDictionary {
-    var coords: [String:Any?] = [:]
+    var coords: [String:Any] = [:]
     
     if let location = location {
       coords = coords.merging([
