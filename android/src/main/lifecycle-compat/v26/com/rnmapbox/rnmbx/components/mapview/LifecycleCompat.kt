@@ -5,7 +5,7 @@ import android.view.View
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
 
 /**
  * Lifecycle compatibility for Lifecycle 2.6+ which uses 'lifecycle' property
@@ -35,12 +35,11 @@ class RNMBXLifeCycle {
                 }
 
                 // Lifecycle 2.6+ uses property syntax
-                override fun getLifecycle(): Lifecycle {
-                    return lifecycleRegistry
-                }
+                override val lifecycle: Lifecycle
+                    get() = lifecycleRegistry
 
             }
-            ViewTreeLifecycleOwner.set(view, lifecycleOwner)
+            view.setViewTreeLifecycleOwner(lifecycleOwner)
         }
         lifecycleOwner?.handleLifecycleEvent(Lifecycle.Event.ON_START)
     }
