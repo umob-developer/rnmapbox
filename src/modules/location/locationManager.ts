@@ -90,6 +90,7 @@ export class LocationManager {
   subscription: EmitterSubscription | EventSubscription | null;
   _appStateListener: NativeEventSubscription;
   _minDisplacement?: number;
+  _mockLocation: Location | null;
 
   constructor() {
     this._listeners = [];
@@ -103,9 +104,23 @@ export class LocationManager {
       'change',
       this._handleAppStateChange.bind(this),
     );
+
+    this._mockLocation = null;
+  }
+
+  setMockLocation(updater: Location | null) {
+    this._mockLocation = updater;
+  }
+
+  hasMockLocation(): boolean {
+    return this._mockLocation !== null;
   }
 
   async getLastKnownLocation() {
+    if (this._mockLocation) {
+      this._lastKnownLocation = this._mockLocation;
+      return this._lastKnownLocation;
+    }
     if (!this._lastKnownLocation) {
       let lastKnownLocation;
 
@@ -218,7 +233,11 @@ export class LocationManager {
     this._requestsAlwaysUse = requestsAlwaysUse;
   }
 
-  _onUpdate(location: Location) {
+  _onUpdate(newLocation: Location) {
+    let location = newLocation;
+    if (this._mockLocation) {
+      location = this._mockLocation;
+    }
     this._lastKnownLocation = location;
 
     this._listeners.forEach((l) => l(location));

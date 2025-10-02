@@ -1,7 +1,8 @@
 import React, { ReactElement } from 'react';
 
-import locationManager from '../modules/location/locationManager';
-import { type Location } from '../modules/location/locationManager';
+import locationManager, {
+  type Location,
+} from '../modules/location/locationManager';
 import { CircleLayerStyle } from '../Mapbox';
 
 import Annotation from './Annotation';
@@ -126,6 +127,11 @@ type Props = {
    * Whether location icon is visible
    */
   visible?: boolean;
+
+  /**
+  * Force a mock user location, ignoring the device location updates.
+  */
+  mockLocation?: Location;
 };
 
 type UserLocationState = {
@@ -152,6 +158,8 @@ class UserLocation extends React.Component<Props, UserLocationState> {
       coordinates: null,
       heading: null,
     };
+
+    locationManager.setMockLocation(props.mockLocation ?? null);
 
     this._onLocationUpdate = this._onLocationUpdate.bind(this);
   }
@@ -181,6 +189,14 @@ class UserLocation extends React.Component<Props, UserLocationState> {
       running: this.needsLocationManagerRunning(),
     });
 
+    if (this.props.mockLocation !== prevProps.mockLocation) {
+      locationManager.setMockLocation(this.props.mockLocation ?? null);
+      if(this.props.mockLocation) {
+        this._onLocationUpdate(this.props.mockLocation ?? null);
+      } else {
+        this._onLocationUpdate(await locationManager.getLastKnownLocation());
+      }
+    }
     if (this.props.minDisplacement !== prevProps.minDisplacement) {
       locationManager.setMinDisplacement(this.props.minDisplacement || 0);
     }
@@ -233,10 +249,17 @@ class UserLocation extends React.Component<Props, UserLocationState> {
     );
   }
 
-  _onLocationUpdate(location: Location | null) {
+  _onLocationUpdate(newLocation: Location | null) {
+    let location = newLocation;
+    if (this.props.mockLocation) {
+      location = this.props.mockLocation;
+    }
     if (!this._isMounted || !location) {
       return;
     }
+    if(!location.coords?.latitude) return;
+    if(!location.coords?.longitude) return;
+
     let coordinates = null;
     let heading = null;
 
