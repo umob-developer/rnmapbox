@@ -128,7 +128,7 @@ type ExpressionParameters =
   | 'raster-value'
   | 'raster-particle-speed';
 
-type ResolvedImageType = ImageSourcePropType | string;
+export type ResolvedImageType = ImageSourcePropType | string;
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export type Value<T, _AllowedParameters extends ExpressionParameters[] = []> =
