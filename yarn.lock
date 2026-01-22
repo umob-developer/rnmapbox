@@ -4043,7 +4043,7 @@ __metadata:
     react: 19.1.0
     react-docgen: "rnmapbox/react-docgen#rnmapbox-dist-react-docgen-v6"
     react-native: 0.81.1
-    react-native-builder-bob: 0.35.1
+    react-native-builder-bob: 0.38.4
     react-test-renderer: 19.1.0
     release-it: ^19.0.4
     ts-node: ^10.9.2
@@ -15736,9 +15736,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-builder-bob@npm:0.35.1":
-  version: 0.35.1
-  resolution: "react-native-builder-bob@npm:0.35.1"
+"react-native-builder-bob@npm:0.38.4":
+  version: 0.38.4
+  resolution: "react-native-builder-bob@npm:0.38.4"
   dependencies:
     "@babel/core": ^7.25.2
     "@babel/plugin-transform-strict-mode": ^7.24.7
@@ -15764,7 +15764,7 @@ __metadata:
     yargs: ^17.5.1
   bin:
     bob: bin/bob
-  checksum: da42f3c12b271c7aba5583c907d1ce250d6fd3a92dfedb6586bb91784d89e44fb8f4b88ee54c96d760d44824ac2834813e8ef3eaea843704ebbf5eef48cf6e11
+  checksum: fbbe12375a5e567d476fbc07fa8c7cda6d4e4b0631abef7f2243b21fd8329d192bcb28fb58fa0beaee7b39831c0bc79264e70827635e4e48b3033bf6640cfcc9
   languageName: node
   linkType: hard
 
